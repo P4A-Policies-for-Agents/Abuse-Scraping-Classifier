@@ -1,0 +1,53 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Orders Self-Service API (S7 demo mock)",
+    "description": "A minimal customer self-service Orders API used to demo the Abuse and Scraping Classifier gateway policy. A caller may read only its own order (id 1001 for the demo key); every other id returns 403 forbidden, which is what turns a sequential-id enumeration walk into a rising 403 share the classifier keys on.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/api/platform/<A2D_MOCK_SERVER_ID>/api",
+      "description": "Platform mock endpoint"
+    }
+  ],
+  "paths": {
+    "/profile": {
+      "get": {
+        "summary": "Get the calling customer's own profile",
+        "description": "Returns the calling customer's own profile record. Used by the normal-client path of the demo to show ordinary, low-rate, low-error traffic that never trips the abuse classifier trigger.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "summary": "Get an order by id for the calling customer",
+        "description": "Returns the order if it belongs to the calling customer identified by their x-api-key, otherwise returns 403 forbidden. In this demo only order id 1001 belongs to the caller; every other numeric id returns 403, which turns a sequential enumeration walk into a rising 403 share.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {}
+}

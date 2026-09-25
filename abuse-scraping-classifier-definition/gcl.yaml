@@ -1,0 +1,176 @@
+---
+apiVersion: gateway.mulesoft.com/v1alpha1
+kind: Extension
+metadata:
+  labels:
+    title: Abuse & Scraping Classifier
+    category: Security
+    description: >-
+      Classifies client behaviour (enumeration, scraping, probing) from a
+      code-computed summary of recent requests and sets an x-jev-abuse header a
+      rate-limiting policy can tier on. The typed Jev judge runs only when
+      traffic already looks unusual.
+    metadata/capabilities/injectionPoint: inbound
+    metadata/capabilities/assetTypes: rest,http
+    metadata/interfaceScope: api,resource
+spec:
+  extends:
+    - name: extension-definition
+      namespace: default
+  properties:
+    # ── Operating mode (jev-policy-common) ──────────────────────────────────
+    mode:
+      type: string
+      enum: [enforce, shadow, off]
+      default: shadow
+      description: >-
+        enforce sets the x-jev-abuse header and applies blockVerdicts. shadow
+        (default for first deployment) computes and logs the verdict but never
+        mutates the request. off passes through without tracking or judging.
+    failMode:
+      type: string
+      enum: [open, closed]
+      default: open
+      description: >-
+        On a judge error or timeout the client is treated as normal_use (this
+        classifier only annotates/tiers, so it never fails closed). Present for
+        family parity; open is recommended and effective.
+    # ── Judge (jev-client) ──────────────────────────────────────────────────
+    jevProvider:
+      type: string
+      enum: [mock, typesafe, openai, openrouter, litellm, cloudflare, custom]
+      default: typesafe
+      description: >-
+        System-One judge provider. typesafe = TypeSafe Jev noul/choice API.
+        openai/openrouter/litellm/custom = an OpenAI-compatible chat endpoint
+        driven as a typed JSON judge. mock = deterministic in-policy judge for
+        tests and offline demos (requires allowMock: true).
+    jevService:
+      type: string
+      format: service
+      description: >-
+        Base URL of the judge provider (e.g. https://openrouter.ai or the
+        TypeSafe System One host). Required even for mock (any reachable URL);
+        the mock provider never calls it.
+    jevPath:
+      type: string
+      description: >-
+        Optional path override for the judge endpoint. Defaults per provider
+        (e.g. /api/v1/chat/completions for OpenAI-compatible providers).
+    jevApiKey:
+      type: string
+      description: API key / bearer token for the judge provider. Not needed for mock.
+      "@context": { "@characteristics": [security:sensitive] }
+    jevModel:
+      type: string
+      default: "~typesafe/jev-latest"
+      description: >-
+        Judge model id. Defaults to the latest TypeSafe Jev model. For
+        OpenAI-compatible providers set your chat model (e.g. openai/gpt-4o-mini).
+        Ignored for cloudflare and mock.
+    cloudflareAccountId:
+      type: string
+      description: Cloudflare account id (only when jevProvider is cloudflare).
+    customAuthHeader:
+      type: string
+      default: "Authorization"
+      description: Header carrying the credential when jevProvider is custom.
+    jevTimeoutMs:
+      type: integer
+      default: 600
+      minimum: 1
+      description: Per-call judge timeout (ms). Jev is typically 70-500 ms end to end.
+    maxStateTokens:
+      type: integer
+      default: 24000
+      minimum: 256
+      description: >-
+        Approximate token budget (chars/4) for the request summary sent to the
+        judge; longer text is truncated head+tail with a gateway marker.
+    minConfidence:
+      type: number
+      default: 0.6
+      minimum: 0
+      maximum: 1
+      description: >-
+        A non-normal behaviour choice below this confidence is treated as
+        normal_use.
+    # ── Header / logging conventions (jev-policy-common) ────────────────────
+    stripClientJevHeaders:
+      type: boolean
+      default: true
+      description: >-
+        Strip inbound x-jev-* headers from the client request so a client cannot
+        spoof the tier consumed by a later policy on the chain.
+    logStateSample:
+      type: boolean
+      default: false
+      description: >-
+        Log a short sample of the request summary at debug level. Off by default
+        (paths can carry identifiers); the decision log otherwise records only
+        the buckets and the verdict.
+    sampleRate:
+      type: number
+      default: 1.0
+      minimum: 0
+      maximum: 1
+      description: Reserved for parity; this policy evaluates every triggered client.
+    allowMock:
+      type: boolean
+      default: false
+      description: Permit jevProvider = mock. Guard so mock is never used unintentionally in production.
+    # ── Classifier scope / windowing (S7-specific) ──────────────────────────
+    clientKeyExpression:
+      type: string
+      default: "header:x-api-key"
+      description: >-
+        How to identify a client. ip = first x-forwarded-for hop (else x-real-ip);
+        header:<name> = a request header value (e.g. header:x-api-key);
+        claim:<name> = a header surfaced by a preceding JWT policy. Missing keys
+        collapse to anonymous.
+    apiPurpose:
+      type: string
+      default: ""
+      description: >-
+        One-line description of what this API is for, given to the judge as
+        context (e.g. "Customer self-service API for viewing own orders").
+    windowSize:
+      type: integer
+      default: 30
+      minimum: 1
+      description: Number of most-recent requests kept per client in the rolling window.
+    rateBuckets:
+      type: array
+      items:
+        type: number
+      default: [20, 40, 80]
+      description: >-
+        Requests-per-minute thresholds [medium, high, very_high] for the rate
+        bucket. Values are sorted defensively; a short array falls back to the
+        default.
+    reevaluateSeconds:
+      type: integer
+      default: 60
+      minimum: 1
+      description: >-
+        Minimum seconds between judge calls per client; the verdict is cached for
+        this period. Also used as the Retry-After value on a blocked request.
+    blockVerdicts:
+      type: array
+      items:
+        type: string
+        enum: [enumeration, bulk_scraping, auth_probing, vulnerability_probing]
+      default: []
+      description: >-
+        Verdicts that, in enforce mode, reject the request with HTTP 429 and
+        Retry-After. Empty (default) means annotate only (set the header, never
+        block) and let a downstream Rate Limiting policy act on x-jev-abuse.
+    maxTrackedClients:
+      type: integer
+      default: 10000
+      minimum: 1
+      description: >-
+        Maximum distinct clients tracked at once; least-recently-used clients are
+        evicted. Bounds memory to windowSize x maxTrackedClients.
+  required:
+    - jevService

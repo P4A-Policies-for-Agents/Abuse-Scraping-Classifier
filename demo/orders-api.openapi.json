@@ -1,0 +1,67 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Orders Self-Service API (S7 demo mock)",
+    "version": "1.0.0",
+    "description": "A minimal customer self-service Orders API used to demo the Abuse & Scraping Classifier. A caller may read only its own order (id 1001 for the demo key); every other id returns 403. This shape makes a sequential-id enumeration walk light up as rising 403s over sequential ids."
+  },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "operationId": "getOrder",
+        "summary": "Get an order by id",
+        "description": "Returns the order if it belongs to the calling customer, otherwise 403. In the A2D mock, configure scenario routing so id=1001 returns 200 with a sample order and any other id returns 403 forbidden — this is what turns an id walk into a high 4xx share the classifier keys on.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "Numeric order identifier the caller wants to read."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's own order.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1001,
+                  "status": "shipped",
+                  "total": 42.5,
+                  "currency": "USD",
+                  "items": [{ "sku": "WIDGET-1", "qty": 2 }]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The order does not belong to the caller.",
+            "content": {
+              "application/json": {
+                "example": { "error": "forbidden", "message": "This order is not yours." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "getProfile",
+        "summary": "Get the calling customer's profile",
+        "description": "Returns the calling customer's own profile. Used by the normal-client path of the demo to show ordinary, low-rate, low-error traffic that never trips the classifier trigger.",
+        "responses": {
+          "200": {
+            "description": "The caller's profile.",
+            "content": {
+              "application/json": {
+                "example": { "customerId": 1001, "name": "Ada Customer", "tier": "standard" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

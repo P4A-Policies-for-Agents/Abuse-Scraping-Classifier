@@ -1,0 +1,36 @@
+{
+  "_comment": "Copy to demo/config.json and fill in. The demo uses the deterministic in-policy mock judge (jevProvider=mock + allowMock=true), so it needs NO external Jev key and runs fully offline. Swap jevProvider to typesafe/openai/openrouter/etc. + set jevApiKey to use a real System-One judge.",
+
+  "mode": "enforce",
+  "_mode_comment": "enforce sets x-jev-abuse and applies blockVerdicts. shadow computes+logs but never mutates — use it first, then flip to enforce. off skips tracking + judging.",
+
+  "failMode": "open",
+  "_failMode_comment": "This classifier only annotates/tiers, so it never fails closed: on a judge error/timeout the client is treated as normal_use.",
+
+  "jevProvider": "mock",
+  "allowMock": true,
+  "_judge_comment": "mock = deterministic classifier baked into the policy (no network). allowMock MUST be true or the policy fails open. jevService is required even for mock (any reachable URL; mock never calls it).",
+  "jevService": "https://www.a2d-ai.com",
+
+  "clientKeyExpression": "header:x-api-key",
+  "_clientKey_comment": "How a client is identified. ip = first x-forwarded-for hop; header:<name> = a request header; claim:<name> = a header surfaced by a preceding JWT policy.",
+
+  "apiPurpose": "Customer self-service API for viewing your own orders.",
+  "_apiPurpose_comment": "Given to the judge as context so it can tell ordinary use from enumeration/scraping/probing.",
+
+  "windowSize": 30,
+  "rateBuckets": [10, 20, 40],
+  "_rate_comment": "Requests-per-minute thresholds [medium, high, very_high]. Lowered from the [20,40,80] default so the demo trips the rate bucket quickly.",
+
+  "reevaluateSeconds": 30,
+  "_reeval_comment": "At most one judge call per client per this many seconds; the verdict is cached and reused. Also the Retry-After value on a blocked request.",
+
+  "minConfidence": 0.6,
+
+  "blockVerdicts": ["enumeration", "auth_probing"],
+  "_block_comment": "In enforce mode these verdicts get HTTP 429 + Retry-After. Leave empty [] to annotate only (set x-jev-abuse, never block) and let a downstream Rate Limiting policy act on the header.",
+
+  "maxTrackedClients": 10000,
+
+  "_optional_comment": "jevTimeoutMs, maxStateTokens, stripClientJevHeaders, logStateSample, sampleRate all take built-in defaults if omitted."
+}
